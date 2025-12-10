@@ -194,9 +194,9 @@ validateCreatedCredentials = (creds, authNonce, rpId, toSave) ->
 
     clientExtensionResults = creds.getClientExtensionResults()
     olog clientExtensionResults
-    # console.log(clientExtensionResults.prf)
-    # return "Only check PRD result!"
-
+    if !clientExtensionResults.prf? then return "PRF is not enabled!"
+    if !clientExtensionResults.prf.enabled? then return "PRF is not enabled!"
+    
     clientDataString = decoder.decode(resp.clientDataJSON)
     clientData = JSON.parse(clientDataString)
     # olog clientData
@@ -297,7 +297,7 @@ okpToJwk = (crvKey, xBytes) ->
     # log "okpToJwk"
     kty = "OKP"
     crv = crvFromKey[crvKey]
-    x = xBytes.toBase64({alphabet:"base64url"}, omitPadding: true)
+    x = xBytes.toBase64({alphabet:"base64url", omitPadding: true})
     ext = true
     key_ops = ["verify"] 
     return {kty, crv, x, ext, key_ops}
@@ -306,8 +306,8 @@ ecToJwk = (crvKey, xBytes, yBytes) ->
     # log "ecToJwk"
     kty = "EC"
     crv = crvFromKey[crvKey]
-    x = xBytes.toBase64({alphabet:"base64url"}, omitPadding: true)
-    y = yBytes.toBase64({alphabet: "base64url"}, omitPadding: true)
+    x = xBytes.toBase64({alphabet:"base64url", omitPadding: true})
+    y = yBytes.toBase64({alphabet: "base64url", omitPadding: true})
     ext = true
     key_ops = ["verify"] 
     return {kty, crv, x, y, ext, key_ops}
@@ -315,8 +315,8 @@ ecToJwk = (crvKey, xBytes, yBytes) ->
 rsaToJwk = (nBytes, eBytes) ->
     # log "rsaToJwk"
     kty = "RSA"
-    n = xBytes.toBase64({alphabet:"base64url"}, omitPadding: true)
-    e = yBytes.toBase64({alphabet: "base64url"}, omitPadding: true)
+    n = xBytes.toBase64({alphabet:"base64url", omitPadding: true})
+    e = yBytes.toBase64({alphabet: "base64url", omitPadding: true})
     ext = true
     key_ops = ["verify"] 
     return {kty, crv, x, y, ext, key_ops}
@@ -383,10 +383,11 @@ export run = ->
             # console.log(credentials)
             err = await validateAuthorizationData(credentials, authNonceHex, storageObj.accountData, rpId)
             if err then throw new Error(err) 
-
+            
             if credentials?
                 credsJSON = credentials.toJSON() # This would be used to generate the data for the server
                 olog credsJSON
+                alert("Successfull authorization with given Credentials!\n    "+JSON.stringify(credsJSON, null, 4))
                 
                 response = await srv.login(credsJSON)
                 if response.ok then return
@@ -398,6 +399,8 @@ export run = ->
 
             err = await validateCreatedCredentials(credentials, authNonceHex,  rpId, authExtract)
             if err then throw new Error(err)
+
+            alert("Successfully created Credentials on Authenticator!\n    authExtract: "+JSON.stringify(authExtract, null, 4))
 
             # olog authExtract
             storageObj.accountData = authExtract
@@ -417,4 +420,8 @@ export run = ->
             srv.register(credsJSON)
             # srv.register(authExtract) # but maybe we use our own format :-)
 
-    catch err then console.error(err)
+    catch err
+        console.error(err) 
+        alert(err) if typeof err == "string"
+        alert(JSON.stringify(err, null, 4)) if typeof err == "object"
+    return
