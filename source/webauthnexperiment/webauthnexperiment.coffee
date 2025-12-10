@@ -81,6 +81,9 @@ nonceBuf = new Uint8Array(32)
 stableNonceHex = null
 
 ############################################################
+progress = null
+
+############################################################
 export initialize = ->
     log "initialize"
     storageObj = S.load(storageKey)
@@ -105,24 +108,30 @@ generateRandomNonce = ->
 
 ############################################################
 validateAuthorizationData = (creds, authNonce, accData, rpId) ->
-    log "validateAuthorizationData"
+    progress = "validateAuthorizationData"
     idHex = tbut.bytesToHex(creds.rawId)
     if !(idHex == accData.credentialsId) then return "Invalid CredentialsId!"
+    progress = "valid credentials Id"
 
     if !creds.response? then return "No Response!"
     resp = creds.response
+    progress = "response exists"
+
     if !(resp instanceof AuthenticatorAssertionResponse)
         return "Invalid Response!"
+    progress = "valid Response Object"
 
     clientExtensionResults = creds.getClientExtensionResults()
     # olog clientExtensionResults
     # console.log()
+    progress = "retrieved extensionResults"
 
     clientDataString = decoder.decode(resp.clientDataJSON)
     clientData = JSON.parse(clientDataString)
     # olog clientData
 
     if !(clientData.type == "webauthn.get") then return "Error in clientData.type!"
+    progress = "validated clientData.type"
 
     nonceBytes = Uint8Array.fromBase64(clientData.challenge, {alphabet:"base64url"})
     nonceHex = tbut.bytesToHex(nonceBytes)
@@ -130,18 +139,21 @@ validateAuthorizationData = (creds, authNonce, accData, rpId) ->
     if !(window.location.origin == clientData.origin) then return "origin did not match!"
     ## Don't support cross origin for now
     if clientData.crossOrigin then return "CrossOrigin not allowed here!"
+    progress = "validated clientData"
 
     clientDataHashHex = await secUtl.sha256(resp.clientDataJSON)
     clientDataHash = tbut.hexToBytes(clientDataHashHex)
     sig = new Uint8Array(resp.signature)
     sigHex = tbut.bytesToHex(sig)
     log "sig: "+sigHex
-
+    progress = "retrieved signature and dataHash"
+    
     ## reading and checking the binaries...
     authData = new Uint8Array(resp.authenticatorData)
     # signedPayload = new Uint8Array(authData.length + authData.length)
     signedPayload = new Uint8Array([...authData, ...clientDataHash])
     # console.log(signedPayload)
+    progress = "constructed signedPayload"
 
     # log authData.length
     # log clientDataHash.length
@@ -154,9 +166,11 @@ validateAuthorizationData = (creds, authNonce, accData, rpId) ->
     counterBytes = authData.slice(33, 37)
     counterHex = tbut.bytesToHex(counterBytes)
     counter = parseInt(counterHex, 16)
+    progress = "extracted counter, rpHashBytes and flags"
 
     if counter < accData.sigCounter then return "SigCounter, less then the authenticators!"
     accData.sigCounter = counter
+    progress = "validated counter"
 
     # olog {
     #     flagsBinaryString, counter
@@ -166,18 +180,23 @@ validateAuthorizationData = (creds, authNonce, accData, rpId) ->
     hasAttestationData = (flags & AT_FLAG) && (flags & AT_FLAG)
     setBackupSate = (flags & BS_FLAG) && (flags & BS_FLAG)
     if setBackupSate then return "Backup not supported!"
+    progress = "retrieved flags and validated backupState"
 
     rpHashHex = tbut.bytesToHex(rpHashBytes) 
     rpIdHashHex = await secUtl.sha256(rpId)
     if !(rpIdHashHex == rpHashHex) then return "rpIdHash was not correct!"
-    
+    progress = "validated rpHash"
+
     if !hasExtensionData then return "No Extension Data!"
     if !clientExtensionResults.prf? then return "No PRF extension available!"
     if !clientExtensionResults.prf.results? then return "No PRF Results exist!"
     if !clientExtensionResults.prf.results.first? then return "No prf.results.first exists!"
-    
+    progress = "validated extension results"
+
     secret = clientExtensionResults.prf.results.first    
     secretHex = tbut.bytesToHex(secret)
+    progress = "retrieved secret"
+
     ## Secrec should not be saved - in real implementation it would be used 
     ## to generate the full key and then deleted immediately
     # log "secretHex: "+secretHex
@@ -187,21 +206,30 @@ validateAuthorizationData = (creds, authNonce, accData, rpId) ->
 
 ############################################################
 validateCreatedCredentials = (creds, authNonce, rpId, toSave) ->
+    progress = "validateCreatedCredentials"
+
     if !creds.response? then return "No Response!"
     resp = creds.response
+    progress = "response available"
+
     if !(resp instanceof AuthenticatorAttestationResponse)
         return "Invalid Response!"
+    progress = "valid response Object"
 
     clientExtensionResults = creds.getClientExtensionResults()
     olog clientExtensionResults
     if !clientExtensionResults.prf? then return "PRF is not enabled!"
     if !clientExtensionResults.prf.enabled? then return "PRF is not enabled!"
-    
+
+    progress = "prf is correctly enabled!"
+
     clientDataString = decoder.decode(resp.clientDataJSON)
     clientData = JSON.parse(clientDataString)
     # olog clientData
-    
+    progress = "retrieved clientData"
+
     if !(clientData.type == "webauthn.create") then return "Error in clientData.type!"
+    progress = "validated clientData.type"
 
     nonceBytes = Uint8Array.fromBase64(clientData.challenge, {alphabet:"base64url"})
     nonceHex = tbut.bytesToHex(nonceBytes)
@@ -209,23 +237,29 @@ validateCreatedCredentials = (creds, authNonce, rpId, toSave) ->
     if !(window.location.origin == clientData.origin) then return "origin did not match!"
     ## Don't support cross origin for now
     if clientData.crossOrigin then return "CrossOrigin not allowed here!"
+    progress = "validated clientData"
     
     clientDataHash = await secUtl.sha256(resp.clientDataJSON)
+    progress = "retrieved clientData hash"
 
     ## Decoding the binaries...
     attestationObjBytes = new Uint8Array(resp.attestationObject)
     decoded = decode(attestationObjBytes)
     # olog decoded
+    progress = "decoded attestations"
 
     authData = decoded.authData
     rpHashBytes = authData.slice(0, 32)
     flags = authData[32]
     counter = authData.slice(33, 37)
+    progress = "extracted flags rpHashBytes and counter"
 
     hasExtensionData = (flags & ED_FLAG) && (flags & ED_FLAG)
     hasAttestationData = (flags & AT_FLAG) && (flags & AT_FLAG)
     setBackupSate = (flags & BS_FLAG) && (flags & BS_FLAG)
     if setBackupSate then return "Backup not supported!"
+
+    progress = "checked flags and validated setBackupState"
 
     ## We donot care about user-presence or user-verification
     ## We only care about the security key from this factor 
@@ -234,6 +268,7 @@ validateCreatedCredentials = (creds, authNonce, rpId, toSave) ->
     rpHashHex = tbut.bytesToHex(rpHashBytes) 
     rpIdHashHex = await secUtl.sha256(rpId)
     if !(rpIdHashHex == rpHashHex) then return "rpIdHash was not correct!"
+    progress = "validated rpHash"
 
     aaguid = tbut.bytesToHex(authData.slice(37,53))
 
@@ -241,7 +276,7 @@ validateCreatedCredentials = (creds, authNonce, rpId, toSave) ->
     counterHex = tbut.bytesToHex(counter)
     counter = parseInt(counterHex, 16)
     credIdLength = parseInt(credIdLengthHex, 16)
-    
+
     # olog {
     #     counter, aaguid, credIdLength, credIdLengthHex
     # }
@@ -249,6 +284,7 @@ validateCreatedCredentials = (creds, authNonce, rpId, toSave) ->
     credIdBytes = authData.slice(55, 55 + credIdLength)
     credIdHex = tbut.bytesToHex(credIdBytes)
     # log "credIdHex: "+credIdHex
+    progress = "extracted credentialsId"
 
     rest = new Uint8Array(authData.slice(55 + credIdLength))
     # log "rest has a length of: "+rest.length
@@ -260,10 +296,13 @@ validateCreatedCredentials = (creds, authNonce, rpId, toSave) ->
         algoCode = struct.get(alg_KEY)
         if !validAlgoDict[algoCode] then return "Invalid algorithm!"
 
+    progress = "decoded rest"
+
     toSave.clientDataHash = clientDataHash
     toSave.sigCounter = counter
     toSave.credentialsId = credIdHex
     toSave.jwkPubKey = jwkFromPubKeyStruct(pubKeyStruct)
+    progress = "created jwkPubKey"
     return
 
 ############################################################
@@ -365,6 +404,8 @@ getSubtleAlgoObj = (jwkKey) ->
 export run = ->
     log "run"
     try
+        progress = "run"
+
         userObj = account.getCurrentUser()
         # authNonceHex = generateRandomNonce()
         if !stableNonceHex? then stableNonceHex = generateRandomNonce()
@@ -377,13 +418,18 @@ export run = ->
         if storageObj.accountData? then accPassKeyId = storageObj.accountData.credentialsId
        
         if accPassKeyId?
+            alert("Case: Existing credentials!")
+
+            progress = "we have accPassKeyId"
             getOptions = generateGetOptions(authNonceHex, accPassKeyId)
             credentials = await credentialsAPI.get(getOptions)
+            progress = "credentials retrieved"
                         
             # console.log(credentials)
             err = await validateAuthorizationData(credentials, authNonceHex, storageObj.accountData, rpId)
             if err then throw new Error(err) 
-            
+            progress = "credentials validated"
+
             if credentials?
                 credsJSON = credentials.toJSON() # This would be used to generate the data for the server
                 olog credsJSON
@@ -393,13 +439,16 @@ export run = ->
                 if response.ok then return
         
         else # no credentials are known -> generate new ones
+            alert("Case: No previous credentials!")
+            progress = "no credentials Id found!"
             createOptions = generateCreateOptions(authNonceHex, userObj, contextSalt)
             credentials = await navigator.credentials.create(createOptions)
+            progress = "credentials created"
             authExtract = {}
 
             err = await validateCreatedCredentials(credentials, authNonceHex,  rpId, authExtract)
             if err then throw new Error(err)
-
+            progress = "credentials validated"
             alert("Successfully created Credentials on Authenticator!\n    authExtract: "+JSON.stringify(authExtract, null, 4))
 
             # olog authExtract
@@ -422,6 +471,11 @@ export run = ->
 
     catch err
         console.error(err) 
+        alert("progress state:"+progress)
         alert(err) if typeof err == "string"
-        alert(JSON.stringify(err, null, 4)) if typeof err == "object"
+        if typeof err == "object" and err instanceof Error
+            alert(err.toString())
+        else if typeof err == "object"
+            alert(JSON.stringify(err, null, 4))
+        
     return
