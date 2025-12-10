@@ -35,6 +35,12 @@ relayingParty = {
     id: window.location.hostname,
 }
 
+allPossibleDevices = {
+    requireResidentKey: false
+    residentKey: "discouraged"
+    userVerification: "discouraged"
+}
+
 ############################################################
 # not used - but informative ;-)
 # allTransports = ["usb", "ble", "nfc", "hybrid", "internal"]
@@ -48,8 +54,9 @@ export generateCreateOptions = (authNonceHex, userObj, contextSalt) ->
     }
 
     prf = { eval: { first: tbut.utf8ToBytes(contextSalt) } }
-        
+    
     publicKey = {
+        authenticatorSelection: allPossibleDevices,
         challenge: tbut.hexToBytes(authNonceHex),
         user: user,
         rp: relayingParty,
