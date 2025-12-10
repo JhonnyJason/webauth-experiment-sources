@@ -62,7 +62,7 @@ export generateCreateOptions = (authNonceHex, userObj, contextSalt) ->
         rp: relayingParty,
         pubKeyCredParams: algoParams,
         extensions: { prf },
-        userVerification: "discouraged",
+        # userVerification: "discouraged",
         attestation: "none", # could be used to track users with "direct", "indirect" allows for anonymous attestation - do we need? maybe none by default :-) 
     }
 

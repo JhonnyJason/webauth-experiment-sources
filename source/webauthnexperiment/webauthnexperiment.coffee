@@ -477,5 +477,5 @@ export run = ->
             alert(err.toString())
         else if typeof err == "object"
             alert(JSON.stringify(err, null, 4))
-        
+        alert("Your Authenticator seems incompatible - please try with a different authenticator :-)")
     return
